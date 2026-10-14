@@ -96,11 +96,23 @@
         <p style="margin-top:22px"><a href="#" class="btn btn-terra" data-action="book">Book an appointment now</a></p>
       </div>
       <div class="addr-card">
-        <h3><span data-biz="name">Bright Smile Dental Studio</span></h3>
+        <h3 id="addr-biz">Bright Smile Dental Studio</h3>
         <p>&#128205; <span data-biz="address">4210 N Lamar Blvd, Austin, TX 78756</span></p>
         <p>&#128222; <a href="tel:+15125550182" data-biz="phone">(512) 555-0182</a></p>
         <p style="color:var(--muted);font-size:14px">Most PPO plans accepted &middot; Free parking &middot; Kid-friendly &middot; Sedation available</p>
       </div>
+    </div>
+    <div class="inbox-card">
+      <h3>&#128203; Captured leads</h3>
+      <p>Curious what &ldquo;Saved to your dashboard&rdquo; actually looks like? This inbox preview shows every lead <span data-biz="host">Nora</span> captures &mdash; stored in your browser&rsquo;s local storage only. Nothing here ever leaves this page.</p>
+      <button id="inbox-toggle" class="btn btn-terra btn-sm" aria-expanded="false" aria-controls="inbox-panel">&#128203; View inbox <span id="inbox-count" class="inbox-count">0</span></button>
+    </div>
+    <div id="inbox-panel" class="inbox-panel" hidden>
+      <div class="inbox-head">
+        <b>&#128203; Captured leads inbox</b>
+        <span class="inbox-local">Browser-local preview &mdash; leads never leave this browser</span>
+      </div>
+      <div id="inbox-list" class="inbox-list"></div>
     </div>
   </div>
 </section>
@@ -129,7 +141,7 @@
 <!-- ============ NORA CHAT WIDGET ============ -->
 <button id="maya-bubble" aria-label="Chat with us">&#128172;<span id="maya-unread" class="hidden">1</span></button>
 
-<div id="maya-panel" role="dialog" aria-label="Chat with Bright Smile Dental Studio">
+<div id="maya-panel" role="dialog" aria-label="Chat">
   <div class="maya-head">
     <div class="maya-avatar" data-biz="host-initial">N</div>
     <div class="who">
