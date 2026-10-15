@@ -314,12 +314,8 @@
 
   function servicesHtml() {
     return 'Everything your smile needs, under one roof. &#129463;<br><br>' +
-      '<b>Most loved:</b><br>&middot; Cleaning &amp; exam &mdash; <b>$99</b> new-patient special<br>' +
-      '&middot; Professional whitening &mdash; from <b>$299</b><br>' +
-      '&middot; Invisalign&reg; clear aligners &mdash; <b>free consult</b><br>' +
-      '&middot; Tooth-colored fillings &mdash; from <b>$150</b><br>' +
-      '&middot; Same-day emergency care<br><br>' +
-      'We work with <b>most PPO insurance plans</b> and verify your benefits before your visit &mdash; no surprise bills. What are you looking for?';
+      'Ask me about any treatment &mdash; I can explain what it involves and <b>book your consultation</b>, ' +
+      'where the team gives you a clear, personalized quote. No surprise bills. What are you looking for?';
   }
 
   function insuranceHtml() {
@@ -532,14 +528,14 @@
         [{ label: '&#128197; Book an appointment' }]);
     }
     if (has(t, 'hour', 'open', 'close', 'when do you', 'what time')) return say(hoursHtml(), [{ label: '&#128197; Book an appointment' }]);
-    if (has(t, 'whiten')) return say('Our in-office whitening lifts <b>up to 8 shades in one visit</b> &mdash; from <b>$299</b>, enamel-safe and sensitivity-managed. &#10024;<br><br>Want me to book your whitening session?', [{ label: '&#128197; Book an appointment' }]);
-    if (has(t, 'invisalign', 'brace', 'aligner', 'straighten', 'orthodont')) return say('Yes &mdash; <b>Invisalign&reg; clear aligners</b> with a <b>free consultation</b> and 3D smile preview, so you see the result before you commit. Most cases finish in 6&ndash;12 months. Want the free consult?', [{ label: '&#128197; Book an appointment' }]);
-    if (has(t, 'clean', 'hygiene', 'scaling', 'polish')) return say('Our gentle cleaning + full exam is <b>$99 for new patients</b> &mdash; polish, gum check, and a complete treatment plan with zero pressure. Most visits take under an hour. &#129463;', [{ label: '&#128197; Book an appointment' }]);
-    if (has(t, 'filling', 'cavity', 'crown', 'root canal', 'implant', 'extraction', 'wisdom')) return say('We\'ve got you covered &mdash; <b>tooth-colored fillings from $150</b>, crowns from $899, implants with a free 3D scan. Every treatment starts with a clear, written quote &mdash; <b>no surprise bills</b>. Want me to book an exam?', [{ label: '&#128197; Book an appointment' }]);
+    if (has(t, 'whiten')) return say('Our in-office whitening lifts <b>up to 8 shades in one visit</b> &mdash; enamel-safe and sensitivity-managed. &#10024;<br><br>Want me to book your whitening consultation for an exact quote?', [{ label: '&#128197; Book an appointment' }]);
+    if (has(t, 'invisalign', 'brace', 'aligner', 'straighten', 'orthodont')) return say('Yes &mdash; we offer <b>clear aligners</b> with a 3D smile preview, so you see the result before you commit. Book a consultation and the team will map your plan and pricing. Want to book?', [{ label: '&#128197; Book an appointment' }]);
+    if (has(t, 'clean', 'hygiene', 'scaling', 'polish')) return say('Our gentle cleaning + full exam includes polish, gum check, and a complete treatment plan with zero pressure. Most visits take under an hour. Book a visit and you will get the exact quote upfront. &#129463;', [{ label: '&#128197; Book an appointment' }]);
+    if (has(t, 'filling', 'cavity', 'crown', 'root canal', 'implant', 'extraction', 'wisdom')) return say('We\'ve got you covered &mdash; tooth-colored fillings, crowns, implants, root canals and more. Every treatment starts with a clear, written quote &mdash; <b>no surprise bills</b>. Want me to book an exam?', [{ label: '&#128197; Book an appointment' }]);
     if (has(t, 'kid', 'child', 'children', 'pediatric', 'toddler', 'family')) return say('We love little smiles! &#128118; <b>Gentle first visits</b> for kids, no scary drills talk, and parents stay chairside the whole time. Family block appointments available too.', [{ label: '&#128197; Book an appointment' }]);
     if (has(t, 'nervous', 'anxious', 'scared', 'afraid', 'sedation', 'gentle', 'pain-free', 'painful', 'does it hurt')) return say('You\'re not alone &mdash; and you\'re safe here. &#129293; <b>Gentle, judgment-free care</b> with sedation options for anxious patients. Most of our nervous patients tell us afterwards: <i>"that was it?"</i>', [{ label: '&#128197; Book an appointment' }]);
     if (has(t, 'service', 'treatment', 'offer', 'do you do', 'price list', 'menu')) return say(servicesHtml(), [{ label: '&#128197; Book an appointment' }]);
-    if (has(t, 'price', 'cost', 'how much', 'expensive', 'cheap', '$$', 'fee')) return say('Honest pricing, in writing: cleaning &amp; exam <b>$99</b> (new patients), whitening from <b>$299</b>, fillings from <b>$150</b>, Invisalign consults <b>free</b>. Insurance verified before your visit &mdash; <b>no surprise bills</b>. &#129463;', [{ label: '&#129463; Our services' }]);
+    if (has(t, 'price', 'cost', 'how much', 'expensive', 'cheap', '$$', 'fee')) return say('Every treatment plan is personalized, so the team gives you a <b>clear written quote</b> at your consultation &mdash; <b>no surprise bills</b>, ever. Want me to book you in?', [{ label: '&#129463; Our services' }]);
     if (has(t, 'human', 'person', 'real person', 'call you', 'phone number', 'speak to', 'dentist')) return say('Of course &mdash; call us at <b>' + escapeHtml(BIZ.phone) + '</b> during open hours and a real human picks up. But honestly? I can handle <b>appointments, insurance questions, and pricing</b> right here, even at 2 AM. &#128521;', defaultChips());
     if (has(t, 'thank', 'thanks', 'thx', 'great', 'awesome', 'perfect')) return say('Anytime! That\'s what I\'m here for. &#129463;', defaultChips());
     if (has(t, 'bye', 'goodbye', 'see you', 'later')) { S.mode = 'idle'; return say('Take care of that smile &mdash; see you soon at ' + escapeHtml(BIZ.name) + '! &#129463;'); }
