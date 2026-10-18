@@ -78,6 +78,12 @@ section.block{padding:72px 0}
 .addr-card p{margin:.3em 0; font-size:15px}
 .addr-card a{color:var(--accent-dark); font-weight:600}
 
+/* ---------- tap-to-call CTA (fleet standard, dental palette) ---------- */
+.call-cta{margin-top:16px; background:var(--accent); color:#fff; box-shadow:0 8px 20px rgba(2,132,199,.35)}
+.call-cta:hover{transform:translateY(-2px); background:var(--accent-dark); color:#fff}
+.call-link{font-weight:700; color:var(--accent-dark); text-decoration:none; border-bottom:2px solid var(--accent)}
+.call-link:hover{border-color:var(--accent-dark)}
+
 /* ---------- captured-leads inbox preview ---------- */
 .inbox-card{background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:28px; margin-top:34px; box-shadow:0 6px 18px rgba(10,90,112,.06)}
 .inbox-card h3{color:var(--teal-dark); margin-bottom:8px}
