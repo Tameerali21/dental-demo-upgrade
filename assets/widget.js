@@ -151,10 +151,11 @@
 
   /* conversation state */
   var S = {
-    mode: 'idle',          // idle | booking | afterhours | review
+    mode: 'idle',          // idle | booking | afterhours | review | quiz
     step: 0,
     booking: {},
     ah: {},
+    quiz: {},
     lastTopic: null
   };
 
@@ -340,7 +341,8 @@
       { label: '&#129463; Our services' },
       { label: '&#128197; Book an appointment' },
       { label: '&#127769; After-hours demo' },
-      { label: '&#11088; Rate your visit' }
+      { label: '&#11088; Rate your visit' },
+      { label: '&#129522; 60-sec smile quiz', value: 'quiz' }
     ];
   }
 
@@ -518,17 +520,101 @@
       [{ label: '&#128197; Book an appointment' }, { label: 'No thanks', value: 'no thanks' }]);
   }
 
+  /* ---------- 60-sec smile quiz (lead-capture pilot, fleet pattern 2026-10-23) ----------
+     HONESTY (hard rule): Nora NEVER invents prices, treatment outcomes, availability,
+     or guarantees — the quiz promises a personalized consultation plan plus an exact
+     written quote AT THE VISIT, never fabricated specifics. */
+  var QUIZ_CONCERNS = ['Toothache / urgent', 'Cleaning', 'Whitening', 'Braces / Invisalign', 'Filling / Cavity', 'Just a checkup'];
+  var QUIZ_TIMELINES = ['ASAP', 'This week', 'This month', 'Just exploring'];
+
+  function canonChoice(t, options) {
+    var tl = t.toLowerCase();
+    for (var i = 0; i < options.length; i++) {
+      if (tl === options[i].toLowerCase()) return options[i];
+    }
+    return t.trim().slice(0, 60); /* free text accepted, length-capped */
+  }
+
+  function startQuiz() {
+    S.mode = 'quiz'; S.step = 0; S.quiz = {};
+    return say('The <b>60-second smile quiz!</b> &#129522;<br><br>' +
+      'Three quick questions and I&rsquo;ll build your <b>smile profile</b> &mdash; then I&rsquo;ll put together a <b>personalized consultation plan</b>. No spam, no guesswork.<br><br>' +
+      '<b>What&rsquo;s your top dental concern?</b>',
+      QUIZ_CONCERNS.map(function (c) { return { label: c }; }));
+  }
+
+  function quizStep(text) {
+    var t = text.trim();
+    if (S.step === 0) {
+      S.quiz.concern = canonChoice(t, QUIZ_CONCERNS); S.step = 1;
+      return say('Got it &mdash; <b>' + escapeHtml(S.quiz.concern) + '</b>. &#129522;<br><br><b>When</b> are you thinking of coming in?',
+        QUIZ_TIMELINES.map(function (x) { return { label: x }; }));
+    }
+    if (S.step === 1) {
+      S.quiz.timeline = canonChoice(t, QUIZ_TIMELINES); S.step = 2;
+      return say('Noted &mdash; <b>' + escapeHtml(S.quiz.timeline) + '</b> it is. &#129522;<br><br><b>What&rsquo;s your name</b> for the smile profile?');
+    }
+    if (S.step === 2) {
+      if (t.length < 2 || t.length > 40) {
+        return say('And your <b>name</b> for the smile profile?');
+      }
+      S.quiz.name = t; S.step = 3;
+      return say('Thanks, ' + escapeHtml(cap(t.split(' ')[0])) + '! And the best <b>number</b> to send your consultation plan to?');
+    }
+    if (S.step === 3) {
+      var digits = t.replace(/\D/g, '');
+      if (digits.length < 7) {
+        return say('Hmm, that doesn\'t look like a complete number &mdash; mind double-checking it? <i>(digits only is fine)</i>');
+      }
+      S.quiz.phone = t;
+      return finishQuiz();
+    }
+  }
+
+  function finishQuiz() {
+    var q = S.quiz;
+    saveLead({
+      name: q.name,
+      phone: q.phone,
+      topic: 'Smile quiz — qualified lead',
+      details: 'Concern ' + q.concern + ' · Timeline ' + q.timeline,
+      source: 'smile quiz'
+    });
+    S.mode = 'idle'; S.step = 0; S.quiz = {};
+    return sayMany([
+      { html: '<b>&#9989; Quiz complete!</b> &#129522;<br><br>Here&rsquo;s your smile profile:' },
+      {
+        dash: [
+          ['Concern', q.concern],
+          ['Timeline', q.timeline]
+        ]
+      },
+      {
+        html: 'I&rsquo;ll put together your <b>personalized consultation plan</b> and send it to your number. ' +
+          'At your visit the team gives you an <b>exact written quote</b> before anything starts &mdash; <b>no surprise bills</b>, ever. ' +
+          'That&rsquo;s the whole point &mdash; <b>every visitor becomes an appointment</b>, not a patient lost to the practice down the street. Anything else I can help with?',
+        chips: defaultChips()
+      }
+    ]);
+  }
+
   /* ---------- main router ---------- */
   function route(text) {
     var t = text.toLowerCase().trim();
 
     if (S.mode === 'booking') return bookingStep(text);
     if (S.mode === 'afterhours') return afterHoursStep(text);
+    if (S.mode === 'quiz') return quizStep(text);
     if (S.mode === 'review' && S.step === 1) return reviewStep(text);
 
     if (has(t, 'book', 'appoint', 'schedul', 'visit for', 'slot')) return startBooking();
     if (has(t, 'after hour', 'after-hour', 'closed', 'late night', 'midnight', '11:42')) return startAfterHours();
     if (has(t, 'review', 'rate', 'stars', 'feedback')) return startReview();
+    /* 60-sec smile quiz: word-start keywords only — audited 2026-10-23 that NO
+       dental router keyword starts with 'qui', so the chip value 'quiz' can
+       never be hijacked (the word-start 'buy' prefix bug class caught on
+       real-estate, 2026-10-20, does not apply here). */
+    if (has(t, 'quiz', 'smile quiz', 'dental quiz', 'find my treatment', 'match quiz')) return startQuiz();
     if (has(t, 'toothache', 'tooth pain', 'tooth hurt', 'emergency', 'urgent', 'broken tooth', 'cracked', 'chipped tooth', 'swollen', 'bleeding')) {
       return say('Tooth pain is the worst &mdash; let\'s not wait on it. &#129463;<br><br>We hold <b>same-day emergency slots</b> every weekday, and urgent cases jump the queue. Want me to <b>book you in</b> right now?',
         [{ label: '&#128197; Book an appointment' }, { label: '&#128336; Hours & location' }]);
