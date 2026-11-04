@@ -151,12 +151,13 @@
 
   /* conversation state */
   var S = {
-    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz
+    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz | familyquiz
     step: 0,
     booking: {},
     ah: {},
     quiz: {},
     prepquiz: {},
+    familyquiz: {},
     lastTopic: null
   };
 
@@ -344,7 +345,8 @@
       { label: '&#127769; After-hours demo' },
       { label: '&#11088; Rate your visit' },
       { label: '&#129522; 60-sec smile quiz', value: 'quiz' },
-      { label: '&#128203; 60-sec consult-prep quiz', value: 'prep quiz' }
+      { label: '&#128203; 60-sec consult-prep quiz', value: 'prep quiz' },
+      { label: '&#128106; 60-sec family quiz', value: 'family quiz' }
     ];
   }
 
@@ -671,6 +673,77 @@
     ]);
   }
 
+  /* ---------- 60-sec family quiz (fleet third-quiz port, 2026-11-04) ----------
+     HONESTY (hard rule): Nora NEVER invents prices, outcomes, before/afters,
+     guarantees, availability, or slots held — the quiz promises a personalized
+     family plan plus a family block appointment OPTION, and an exact written
+     quote AT THE VISIT, never fabricated specifics. */
+  var FAMILY_HOUSEHOLDS = ['Just me', 'Me + partner', 'Whole family', 'Kids only'];
+  var FAMILY_TIMELINES = ['ASAP', 'This week', 'This month', 'Just exploring'];
+
+  function startFamilyQuiz() {
+    S.mode = 'familyquiz'; S.step = 0; S.familyquiz = {};
+    return say('<b>&#128106; The 60-second family quiz!</b><br><br>' +
+      'Three quick questions and I&rsquo;ll build your <b>family profile</b> &mdash; then I&rsquo;ll put together a <b>personalized family plan</b> for everyone under one roof. No spam, no guesswork.<br><br>' +
+      '<b>First: who&rsquo;s the plan for?</b>',
+      FAMILY_HOUSEHOLDS.map(function (c) { return { label: c }; }));
+  }
+
+  function familyQuizStep(text) {
+    var t = text.trim();
+    if (S.step === 0) {
+      S.familyquiz.household = canonChoice(t, FAMILY_HOUSEHOLDS); S.step = 1;
+      return say('Got it &mdash; <b>' + escapeHtml(S.familyquiz.household) + '</b>. &#128106;<br><br><b>When</b> are you thinking of coming in?',
+        FAMILY_TIMELINES.map(function (x) { return { label: x }; }));
+    }
+    if (S.step === 1) {
+      S.familyquiz.timeline = canonChoice(t, FAMILY_TIMELINES); S.step = 2;
+      return say('Noted &mdash; <b>' + escapeHtml(S.familyquiz.timeline) + '</b> it is. &#128106;<br><br><b>What&rsquo;s your name</b> for the family profile?');
+    }
+    if (S.step === 2) {
+      if (t.length < 2 || t.length > 40) {
+        return say('And your <b>name</b> for the family profile?');
+      }
+      S.familyquiz.name = t; S.step = 3;
+      return say('Thanks, ' + escapeHtml(cap(t.split(' ')[0])) + '! And the best <b>number</b> to send your family plan to?');
+    }
+    if (S.step === 3) {
+      var digits = t.replace(/\D/g, '');
+      if (digits.length < 7) {
+        return say('Hmm, that doesn\'t look like a complete number &mdash; mind double-checking it? <i>(digits only is fine)</i>');
+      }
+      S.familyquiz.phone = t;
+      return finishFamilyQuiz();
+    }
+  }
+
+  function finishFamilyQuiz() {
+    var q = S.familyquiz;
+    saveLead({
+      name: q.name,
+      phone: q.phone,
+      topic: 'Family quiz — qualified lead',
+      details: 'Household ' + q.household + ' · Timeline ' + q.timeline,
+      source: 'family quiz'
+    });
+    S.mode = 'idle'; S.step = 0; S.familyquiz = {};
+    return sayMany([
+      { html: '<b>&#9989; Quiz complete!</b> &#128106;<br><br>Here&rsquo;s your family profile:' },
+      {
+        dash: [
+          ['Household', q.household],
+          ['Timeline', q.timeline]
+        ]
+      },
+      {
+        html: 'I&rsquo;ll put together your <b>personalized family plan</b> and send it to your number &mdash; including a <b>family block appointment option</b>, so everyone can be seen together in one visit window if that suits you. ' +
+          'At your visit the team gives you an <b>exact written quote</b> before anything starts &mdash; <b>no surprise bills</b>, ever. ' +
+          'That&rsquo;s the whole point &mdash; <b>every family enquiry becomes a real plan</b>, not a family lost to the practice down the street. Anything else I can help with?',
+        chips: defaultChips()
+      }
+    ]);
+  }
+
   /* ---------- main router ---------- */
   function route(text) {
     var t = text.toLowerCase().trim();
@@ -679,6 +752,7 @@
     if (S.mode === 'afterhours') return afterHoursStep(text);
     if (S.mode === 'quiz') return quizStep(text);
     if (S.mode === 'prepquiz') return prepQuizStep(text);
+    if (S.mode === 'familyquiz') return familyQuizStep(text);
     if (S.mode === 'review' && S.step === 1) return reviewStep(text);
 
     if (has(t, 'book', 'appoint', 'schedul', 'visit for', 'slot')) return startBooking();
@@ -688,6 +762,13 @@
        dental router keyword starts with 'qui', so the chip value 'quiz' can
        never be hijacked (the word-start 'buy' prefix bug class caught on
        real-estate, 2026-10-20, does not apply here). */
+    /* 60-sec family quiz: trigger BEFORE the prep-quiz trigger (and therefore
+       before the smile-quiz trigger) — the chip value 'family quiz' contains
+       'quiz', so the smile quiz's word-start 'quiz' match would otherwise
+       hijack it into the smile quiz (the real-estate 'buy'/'buyer' bug class,
+       2026-10-20). Bare 'family' alone does NOT start the quiz — it falls
+       through to the existing family/kids service branch below. */
+    if (has(t, 'family quiz')) return startFamilyQuiz();
     /* 60-sec consult-prep quiz: trigger BEFORE the smile-quiz trigger — the chip
        value 'prep quiz' contains 'quiz', so the smile quiz's word-start 'quiz'
        match would otherwise hijack it into the smile quiz (the real-estate
