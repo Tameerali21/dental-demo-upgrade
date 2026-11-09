@@ -151,13 +151,14 @@
 
   /* conversation state */
   var S = {
-    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz | familyquiz
+    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz | familyquiz | emergencyquiz
     step: 0,
     booking: {},
     ah: {},
     quiz: {},
     prepquiz: {},
     familyquiz: {},
+    emergencyquiz: {},
     lastTopic: null
   };
 
@@ -346,7 +347,8 @@
       { label: '&#11088; Rate your visit' },
       { label: '&#129522; 60-sec smile quiz', value: 'quiz' },
       { label: '&#128203; 60-sec consult-prep quiz', value: 'prep quiz' },
-      { label: '&#128106; 60-sec family quiz', value: 'family quiz' }
+      { label: '&#128106; 60-sec family quiz', value: 'family quiz' },
+      { label: '&#128680; 60-sec emergency quiz', value: 'emergency quiz' }
     ];
   }
 
@@ -744,6 +746,78 @@
     ]);
   }
 
+  /* ---------- 60-sec emergency quiz (fleet fourth-quiz port, 2026-11-09) ----------
+     HONESTY (hard rule): Nora NEVER invents prices, outcomes, before/afters,
+     guarantees, availability, or slots held — the quiz promises a personalized
+     emergency plan built around the visitor's answers, plus what to do right
+     now while waiting for the visit, and an exact written quote AT THE VISIT,
+     never fabricated specifics. */
+  var EMERGENCY_TYPES = ['Tooth pain', 'Broken tooth', 'Knocked-out tooth', 'Swelling / abscess'];
+  var EMERGENCY_PAINS = ['Mild — annoying', 'Moderate — hard to ignore', 'Severe — can\'t sleep or eat', 'Worst ever — need help now'];
+
+  function startEmergencyQuiz() {
+    S.mode = 'emergencyquiz'; S.step = 0; S.emergencyquiz = {};
+    return say('<b>&#128680; The 60-second emergency quiz!</b><br><br>' +
+      'Two quick questions and I&rsquo;ll build your <b>emergency profile</b> &mdash; then I&rsquo;ll put together a <b>personalized emergency plan</b> built around what&rsquo;s happening, plus what to do right now while you wait for your visit. No spam, no guesswork.<br><br>' +
+      '<b>First: what&rsquo;s the emergency?</b>',
+      EMERGENCY_TYPES.map(function (c) { return { label: c }; }));
+  }
+
+  function emergencyQuizStep(text) {
+    var t = text.trim();
+    if (S.step === 0) {
+      S.emergencyquiz.type = canonChoice(t, EMERGENCY_TYPES); S.step = 1;
+      return say('Got it &mdash; <b>' + escapeHtml(S.emergencyquiz.type) + '</b>. &#128680;<br><br><b>How bad is the pain</b> right now?',
+        EMERGENCY_PAINS.map(function (x) { return { label: x }; }));
+    }
+    if (S.step === 1) {
+      S.emergencyquiz.pain = canonChoice(t, EMERGENCY_PAINS); S.step = 2;
+      return say('Noted &mdash; <b>' + escapeHtml(S.emergencyquiz.pain) + '</b> it is. &#128680;<br><br><b>What&rsquo;s your name</b> for the emergency profile?');
+    }
+    if (S.step === 2) {
+      if (t.length < 2 || t.length > 40) {
+        return say('And your <b>name</b> for the emergency profile?');
+      }
+      S.emergencyquiz.name = t; S.step = 3;
+      return say('Thanks, ' + escapeHtml(cap(t.split(' ')[0])) + '! And the best <b>number</b> to send your emergency plan to?');
+    }
+    if (S.step === 3) {
+      var digits = t.replace(/\D/g, '');
+      if (digits.length < 7) {
+        return say('Hmm, that doesn\'t look like a complete number &mdash; mind double-checking it? <i>(digits only is fine)</i>');
+      }
+      S.emergencyquiz.phone = t;
+      return finishEmergencyQuiz();
+    }
+  }
+
+  function finishEmergencyQuiz() {
+    var q = S.emergencyquiz;
+    saveLead({
+      name: q.name,
+      phone: q.phone,
+      topic: 'Emergency quiz — qualified lead',
+      details: 'Emergency ' + q.type + ' · Pain ' + q.pain,
+      source: 'emergency quiz'
+    });
+    S.mode = 'idle'; S.step = 0; S.emergencyquiz = {};
+    return sayMany([
+      { html: '<b>&#9989; Quiz complete!</b> &#128680;<br><br>Here&rsquo;s your emergency profile:' },
+      {
+        dash: [
+          ['Emergency', q.type],
+          ['Pain', q.pain]
+        ]
+      },
+      {
+        html: 'I&rsquo;ll put together your <b>personalized emergency plan</b> and send it to your number &mdash; including what to do right now while you wait for your visit (keep the area clean, avoid chewing on that side, and call us straight away if swelling spreads or the pain spikes). ' +
+          'At your visit the team gives you an <b>exact written quote</b> before anything starts &mdash; <b>no surprise bills</b>, ever. ' +
+          'That&rsquo;s the whole point &mdash; <b>every urgent enquiry becomes a real plan</b>, not a patient lost to the practice down the street. Anything else I can help with?',
+        chips: defaultChips()
+      }
+    ]);
+  }
+
   /* ---------- main router ---------- */
   function route(text) {
     var t = text.toLowerCase().trim();
@@ -753,6 +827,7 @@
     if (S.mode === 'quiz') return quizStep(text);
     if (S.mode === 'prepquiz') return prepQuizStep(text);
     if (S.mode === 'familyquiz') return familyQuizStep(text);
+    if (S.mode === 'emergencyquiz') return emergencyQuizStep(text);
     if (S.mode === 'review' && S.step === 1) return reviewStep(text);
 
     if (has(t, 'book', 'appoint', 'schedul', 'visit for', 'slot')) return startBooking();
@@ -762,6 +837,27 @@
        dental router keyword starts with 'qui', so the chip value 'quiz' can
        never be hijacked (the word-start 'buy' prefix bug class caught on
        real-estate, 2026-10-20, does not apply here). */
+    /* 60-sec emergency quiz: trigger FIRST, before the family/prep/smile quiz
+       triggers — the chip value 'emergency quiz' contains 'quiz', so the smile
+       quiz's word-start 'quiz' match would otherwise hijack it into the smile
+       quiz (the real-estate 'buy'/'buyer' bug class, 2026-10-20). ROUTER AUDIT
+       2026-11-09 (topic choice): candidates were 'emergency quiz', 'insurance
+       quiz', 'whitening quiz' — all three are structurally clean, but
+       'emergency quiz' has the CLEANEST separation: the only earlier router
+       branches are booking ('book'/'appoint'/'schedul'/'visit for'/'slot'),
+       after-hours ('after hour'/'closed'/'late night'/'midnight'/'11:42') and
+       review ('review'/'rate'/'stars'/'feedback') — none matches 'emergency
+       quiz' or 'urgent quiz'; the emergency INFO branch ('emergency','urgent',
+       'broken tooth','swollen',...) sits AFTER the quiz triggers, so bare
+       'emergency' / 'toothache' / 'urgent' still reach it, never the quiz.
+       ('insurance quiz' would also work — 'insurance'/'insur' info branch is
+       likewise after the quiz triggers — but 'insurance' is also a booking-step
+       reason keyword; 'whitening quiz' would also work — 'whiten' branch is
+       after the quiz triggers — but 'whitening' is a smile-quiz Q1 chip, so
+       the topic would blur into the smile quiz. Emergency triage is the most
+       distinct, highest-intent fourth quiz.) Bare 'emergency' alone does NOT
+       start the quiz — it falls through to the emergency info branch below. */
+    if (has(t, 'emergency quiz', 'urgent quiz')) return startEmergencyQuiz();
     /* 60-sec family quiz: trigger BEFORE the prep-quiz trigger (and therefore
        before the smile-quiz trigger) — the chip value 'family quiz' contains
        'quiz', so the smile quiz's word-start 'quiz' match would otherwise
