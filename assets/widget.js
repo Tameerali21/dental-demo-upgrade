@@ -151,7 +151,7 @@
 
   /* conversation state */
   var S = {
-    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz | familyquiz | emergencyquiz
+    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz | familyquiz | emergencyquiz | sensitivityquiz
     step: 0,
     booking: {},
     ah: {},
@@ -159,6 +159,7 @@
     prepquiz: {},
     familyquiz: {},
     emergencyquiz: {},
+    sensitivityquiz: {},
     lastTopic: null
   };
 
@@ -348,7 +349,8 @@
       { label: '&#129522; 60-sec smile quiz', value: 'quiz' },
       { label: '&#128203; 60-sec consult-prep quiz', value: 'prep quiz' },
       { label: '&#128106; 60-sec family quiz', value: 'family quiz' },
-      { label: '&#128680; 60-sec emergency quiz', value: 'emergency quiz' }
+      { label: '&#128680; 60-sec emergency quiz', value: 'emergency quiz' },
+      { label: '&#10052; 60-sec sensitivity quiz', value: 'sensitivity quiz' }
     ];
   }
 
@@ -818,6 +820,78 @@
     ]);
   }
 
+  /* ---------- 60-sec sensitivity quiz (fleet fifth-quiz port, 2026-11-14) ----------
+     HONESTY (hard rule): Nora NEVER invents prices, outcomes, before/afters,
+     guarantees, availability, or slots held — the quiz promises a personalized
+     sensitivity plan built around the visitor's answers, plus what to do right
+     now while waiting for the visit, and an exact written quote AT THE VISIT,
+     never fabricated specifics. */
+  var SENSITIVITY_TRIGGERS = ['Hot drinks & food', 'Cold drinks & ice cream', 'Sweet foods', 'Brushing or cold air'];
+  var SENSITIVITY_DURATIONS = ['Just started', 'A few weeks', 'Months — comes and goes', 'Years — I avoid triggers'];
+
+  function startSensitivityQuiz() {
+    S.mode = 'sensitivityquiz'; S.step = 0; S.sensitivityquiz = {};
+    return say('<b>&#10052; The 60-second sensitivity quiz!</b><br><br>' +
+      'Two quick questions and I&rsquo;ll build your <b>sensitivity profile</b> &mdash; then I&rsquo;ll put together a <b>personalized sensitivity plan</b> built around what sets it off, plus what to do right now while you wait for your visit. No spam, no guesswork.<br><br>' +
+      '<b>First: what sets it off?</b>',
+      SENSITIVITY_TRIGGERS.map(function (c) { return { label: c }; }));
+  }
+
+  function sensitivityQuizStep(text) {
+    var t = text.trim();
+    if (S.step === 0) {
+      S.sensitivityquiz.trigger = canonChoice(t, SENSITIVITY_TRIGGERS); S.step = 1;
+      return say('Got it &mdash; <b>' + escapeHtml(S.sensitivityquiz.trigger) + '</b>. &#10052;<br><br><b>How long</b> has it bothered you?',
+        SENSITIVITY_DURATIONS.map(function (x) { return { label: x }; }));
+    }
+    if (S.step === 1) {
+      S.sensitivityquiz.duration = canonChoice(t, SENSITIVITY_DURATIONS); S.step = 2;
+      return say('Noted &mdash; <b>' + escapeHtml(S.sensitivityquiz.duration) + '</b> it is. &#10052;<br><br><b>What&rsquo;s your name</b> for the sensitivity profile?');
+    }
+    if (S.step === 2) {
+      if (t.length < 2 || t.length > 40) {
+        return say('And your <b>name</b> for the sensitivity profile?');
+      }
+      S.sensitivityquiz.name = t; S.step = 3;
+      return say('Thanks, ' + escapeHtml(cap(t.split(' ')[0])) + '! And the best <b>number</b> to send your sensitivity plan to?');
+    }
+    if (S.step === 3) {
+      var digits = t.replace(/\D/g, '');
+      if (digits.length < 7) {
+        return say('Hmm, that doesn\'t look like a complete number &mdash; mind double-checking it? <i>(digits only is fine)</i>');
+      }
+      S.sensitivityquiz.phone = t;
+      return finishSensitivityQuiz();
+    }
+  }
+
+  function finishSensitivityQuiz() {
+    var q = S.sensitivityquiz;
+    saveLead({
+      name: q.name,
+      phone: q.phone,
+      topic: 'Sensitivity quiz — qualified lead',
+      details: 'Trigger ' + q.trigger + ' · Duration ' + q.duration,
+      source: 'sensitivity quiz'
+    });
+    S.mode = 'idle'; S.step = 0; S.sensitivityquiz = {};
+    return sayMany([
+      { html: '<b>&#9989; Quiz complete!</b> &#10052;<br><br>Here&rsquo;s your sensitivity profile:' },
+      {
+        dash: [
+          ['Trigger', q.trigger],
+          ['Duration', q.duration]
+        ]
+      },
+      {
+        html: 'I&rsquo;ll put together your <b>personalized sensitivity plan</b> and send it to your number &mdash; including what to do right now while you wait for your visit (go easy on very hot or very cold foods, use a soft brush with a light touch, and note which tooth reacts so the team can check it first). ' +
+          'At your visit the team gives you an <b>exact written quote</b> before anything starts &mdash; <b>no surprise bills</b>, ever. ' +
+          'That&rsquo;s the whole point &mdash; <b>every sensitive-tooth enquiry becomes a real plan</b>, not a patient lost to the practice down the street. Anything else I can help with?',
+        chips: defaultChips()
+      }
+    ]);
+  }
+
   /* ---------- main router ---------- */
   function route(text) {
     var t = text.toLowerCase().trim();
@@ -828,6 +902,7 @@
     if (S.mode === 'prepquiz') return prepQuizStep(text);
     if (S.mode === 'familyquiz') return familyQuizStep(text);
     if (S.mode === 'emergencyquiz') return emergencyQuizStep(text);
+    if (S.mode === 'sensitivityquiz') return sensitivityQuizStep(text);
     if (S.mode === 'review' && S.step === 1) return reviewStep(text);
 
     if (has(t, 'book', 'appoint', 'schedul', 'visit for', 'slot')) return startBooking();
@@ -857,6 +932,26 @@
        the topic would blur into the smile quiz. Emergency triage is the most
        distinct, highest-intent fourth quiz.) Bare 'emergency' alone does NOT
        start the quiz — it falls through to the emergency info branch below. */
+    /* 60-sec sensitivity quiz: trigger FIRST among quiz triggers, before the
+       emergency/family/prep/smile quiz triggers — the chip value 'sensitivity
+       quiz' contains 'quiz', so the smile quiz's word-start 'quiz' match would
+       otherwise hijack it into the smile quiz (the real-estate 'buy'/'buyer'
+       bug class, 2026-10-20). ROUTER AUDIT 2026-11-14 (topic choice):
+       candidates were 'whitening quiz', 'kids quiz', 'checkup quiz',
+       'sensitivity quiz', 'night-guard quiz', 'senior quiz', 'sports quiz'.
+       'sensitivity quiz' is the CLEANEST: no router keyword anywhere matches
+       'sensitivity' or 'sensitivity quiz' (the word appears only inside the
+       whitening info COPY, never as a trigger); it is not a smile-quiz Q1 chip
+       ('Whitening' is — so 'whitening quiz' would blur into the smile quiz),
+       not a booking reason, not a family/kids branch keyword ('kids quiz'
+       would blur into the family quiz; 'checkup quiz' would blur into the
+       smile-quiz 'Just a checkup' chip); the only earlier router branches are
+       booking ('book'/'appoint'/'schedul'/'visit for'/'slot'), after-hours
+       ('after hour'/'closed'/'late night'/'midnight'/'11:42') and review
+       ('review'/'rate'/'stars'/'feedback') — none matches 'sensitivity quiz'.
+       Bare 'sensitivity' alone does NOT start the quiz — it falls through to
+       the graceful fallback (same class as bare 'prep'). */
+    if (has(t, 'sensitivity quiz')) return startSensitivityQuiz();
     if (has(t, 'emergency quiz', 'urgent quiz')) return startEmergencyQuiz();
     /* 60-sec family quiz: trigger BEFORE the prep-quiz trigger (and therefore
        before the smile-quiz trigger) — the chip value 'family quiz' contains
