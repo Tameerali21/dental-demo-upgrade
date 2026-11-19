@@ -151,7 +151,7 @@
 
   /* conversation state */
   var S = {
-    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz | familyquiz | emergencyquiz | sensitivityquiz
+    mode: 'idle',          // idle | booking | afterhours | review | quiz | prepquiz | familyquiz | emergencyquiz | sensitivityquiz | implantquiz
     step: 0,
     booking: {},
     ah: {},
@@ -160,6 +160,7 @@
     familyquiz: {},
     emergencyquiz: {},
     sensitivityquiz: {},
+    implantquiz: {},
     lastTopic: null
   };
 
@@ -350,7 +351,8 @@
       { label: '&#128203; 60-sec consult-prep quiz', value: 'prep quiz' },
       { label: '&#128106; 60-sec family quiz', value: 'family quiz' },
       { label: '&#128680; 60-sec emergency quiz', value: 'emergency quiz' },
-      { label: '&#10052; 60-sec sensitivity quiz', value: 'sensitivity quiz' }
+      { label: '&#10052; 60-sec sensitivity quiz', value: 'sensitivity quiz' },
+      { label: '&#129463; 60-sec implant quiz', value: 'implant quiz' }
     ];
   }
 
@@ -892,6 +894,78 @@
     ]);
   }
 
+  /* ---------- 60-sec implant quiz (fleet sixth-quiz port, 2026-11-19) ----------
+     HONESTY (hard rule): Nora NEVER invents prices, outcomes, before/afters,
+     guarantees, availability, or slots held — the quiz promises a personalized
+     implant plan built around the visitor's answers, plus what to expect at
+     the consultation, and an exact written quote AT THE VISIT, never
+     fabricated specifics. */
+  var IMPLANT_SITUATIONS = ['One missing tooth', 'Several missing teeth', 'Loose denture / bridge', 'Just exploring options'];
+  var IMPLANT_TIMELINES = ['Just lost it', 'A few months ago', 'Over a year ago', 'Tooth still there — failing'];
+
+  function startImplantQuiz() {
+    S.mode = 'implantquiz'; S.step = 0; S.implantquiz = {};
+    return say('<b>&#129463; The 60-second implant quiz!</b><br><br>' +
+      'Two quick questions and I&rsquo;ll build your <b>implant profile</b> &mdash; then I&rsquo;ll put together a <b>personalized implant plan</b> built around your situation, plus what to expect at your consultation. No spam, no guesswork.<br><br>' +
+      '<b>First: what&rsquo;s the situation with the tooth?</b>',
+      IMPLANT_SITUATIONS.map(function (c) { return { label: c }; }));
+  }
+
+  function implantQuizStep(text) {
+    var t = text.trim();
+    if (S.step === 0) {
+      S.implantquiz.situation = canonChoice(t, IMPLANT_SITUATIONS); S.step = 1;
+      return say('Got it &mdash; <b>' + escapeHtml(S.implantquiz.situation) + '</b>. &#129463;<br><br><b>How long</b> has it been like this?',
+        IMPLANT_TIMELINES.map(function (x) { return { label: x }; }));
+    }
+    if (S.step === 1) {
+      S.implantquiz.timeline = canonChoice(t, IMPLANT_TIMELINES); S.step = 2;
+      return say('Noted &mdash; <b>' + escapeHtml(S.implantquiz.timeline) + '</b> it is. &#129463;<br><br><b>What&rsquo;s your name</b> for the implant profile?');
+    }
+    if (S.step === 2) {
+      if (t.length < 2 || t.length > 40) {
+        return say('And your <b>name</b> for the implant profile?');
+      }
+      S.implantquiz.name = t; S.step = 3;
+      return say('Thanks, ' + escapeHtml(cap(t.split(' ')[0])) + '! And the best <b>number</b> to send your implant plan to?');
+    }
+    if (S.step === 3) {
+      var digits = t.replace(/\D/g, '');
+      if (digits.length < 7) {
+        return say('Hmm, that doesn\'t look like a complete number &mdash; mind double-checking it? <i>(digits only is fine)</i>');
+      }
+      S.implantquiz.phone = t;
+      return finishImplantQuiz();
+    }
+  }
+
+  function finishImplantQuiz() {
+    var q = S.implantquiz;
+    saveLead({
+      name: q.name,
+      phone: q.phone,
+      topic: 'Implant quiz — qualified lead',
+      details: 'Situation ' + q.situation + ' · Timeline ' + q.timeline,
+      source: 'implant quiz'
+    });
+    S.mode = 'idle'; S.step = 0; S.implantquiz = {};
+    return sayMany([
+      { html: '<b>&#9989; Quiz complete!</b> &#129463;<br><br>Here&rsquo;s your implant profile:' },
+      {
+        dash: [
+          ['Situation', q.situation],
+          ['Timeline', q.timeline]
+        ]
+      },
+      {
+        html: 'I&rsquo;ll put together your <b>personalized implant plan</b> and send it to your number &mdash; including what to expect at your consultation, so you know the options before you decide anything. ' +
+          'At your visit the team gives you an <b>exact written quote</b> before anything starts &mdash; <b>no surprise bills</b>, ever. ' +
+          'That&rsquo;s the whole point &mdash; <b>every missing-tooth enquiry becomes a real plan</b>, not a patient lost to the practice down the street. Anything else I can help with?',
+        chips: defaultChips()
+      }
+    ]);
+  }
+
   /* ---------- main router ---------- */
   function route(text) {
     var t = text.toLowerCase().trim();
@@ -903,6 +977,7 @@
     if (S.mode === 'familyquiz') return familyQuizStep(text);
     if (S.mode === 'emergencyquiz') return emergencyQuizStep(text);
     if (S.mode === 'sensitivityquiz') return sensitivityQuizStep(text);
+    if (S.mode === 'implantquiz') return implantQuizStep(text);
     if (S.mode === 'review' && S.step === 1) return reviewStep(text);
 
     if (has(t, 'book', 'appoint', 'schedul', 'visit for', 'slot')) return startBooking();
@@ -951,6 +1026,27 @@
        ('review'/'rate'/'stars'/'feedback') — none matches 'sensitivity quiz'.
        Bare 'sensitivity' alone does NOT start the quiz — it falls through to
        the graceful fallback (same class as bare 'prep'). */
+    /* 60-sec implant quiz: trigger FIRST among quiz triggers, before the
+       sensitivity/emergency/family/prep/smile quiz triggers — the chip value
+       'implant quiz' contains 'quiz', so the smile quiz's word-start 'quiz'
+       match would otherwise hijack it into the smile quiz (the real-estate
+       'buy'/'buyer' bug class, 2026-10-20). ROUTER AUDIT 2026-11-19 (topic
+       choice): candidates were 'implant quiz', 'gum quiz', 'night-guard quiz',
+       'denture quiz', 'senior quiz', 'sports quiz'. 'implant quiz' is the
+       CLEANEST: no earlier router branch matches it (booking, after-hours and
+       review keywords share nothing with 'implant'/'quiz'); the implant INFO
+       branch ('filling'/'cavity'/'crown'/'root canal'/'implant'/...) sits
+       AFTER the quiz triggers, so bare 'implant' still reaches implant info,
+       never the quiz; it is not a smile-quiz Q1 chip ('Whitening' is — so
+       'whitening quiz' would blur into the smile quiz), not a booking reason,
+       not a family/kids branch keyword ('kids quiz' would blur into the
+       family quiz; 'checkup quiz' would blur into the smile-quiz 'Just a
+       checkup' chip); the 'guardian' insurance keyword does not match
+       'night-guard quiz' but that topic is narrower, and 'gum quiz'/'denture
+       quiz' are likewise clean but lower-intent than implants. Alias
+       'implants quiz' rides the same trigger. Bare 'implant' alone does NOT
+       start the quiz — it falls through to the implant info branch below. */
+    if (has(t, 'implant quiz', 'implants quiz')) return startImplantQuiz();
     if (has(t, 'sensitivity quiz')) return startSensitivityQuiz();
     if (has(t, 'emergency quiz', 'urgent quiz')) return startEmergencyQuiz();
     /* 60-sec family quiz: trigger BEFORE the prep-quiz trigger (and therefore
